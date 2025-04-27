@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>콘조인트 분석 프로그램</title>
+    <style>
+        :root {
+            --primary-color: #4c6ef5;
+            --secondary-color: #f8f9fa;
+            --border-color: #dee2e6;
+            --text-color: #212529;
+            --success-color: #38b2ac;
+        }
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+        
+        input, select, button {
+            font-family: inherit;
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            border: none;
+            padding: 10px 15px;
+            margin: 10px 0;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #364fc7;
+        }
+        
+        .step {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: white;
+        }
+        
+        .step h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .attribute-container, .product-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: var(--secondary-color);
+            border-radius: 8px;
+        }
+        
+        .level-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .level-container input {
+            margin-right: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: var(--secondary-color);
+        }
+        
+        .results {
+            display: none;
+            margin-top: 30px;
+        }
+        
+        .error {
+            color: #e53e3e;
+            margin: 5px 0;
+        }
+        
+        .success {
+            color: var(--success-color);
+            margin: 5px 0;
+        }
+        
+        .hide {
+            display: none;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        
+        .btn-reset {
+            background-color: #e53e3e;
+        }
+        
+        .btn-reset:hover {
+            background-color: #c53030;
+        }
+        
+        .highlight {
+            background-color: rgba(76, 110, 245, 0.1);
+            padding: 2px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .step {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>콘조인트 분석 프로그램</h1>
+        <p>제품의 속성과 수준을 정의하고 다항 로지트 모델을 사용하여 시장 점유율을 예측합니다.</p>
+        
+        <div class="step" id="step1">
+            <h2>1단계: 제품 및 속성 정의</h2>
+            <div class="form-group">
+                <label for="numProducts">경쟁할 제품의 수 (본인 제품 포함):</label>
+                <input type="number" id="numProducts" min="2" max="10" value="3">
+                <button onclick="setupProducts()">제품 설정</button>
+            </div>
+            
+            <div id="productSetup" class="hide">
+                <div class="form-group">
+                    <label for="numAttributes">속성의 수 (최대 4개):</label>
+                    <input type="number" id="numAttributes" min="1" max="4" value="3">
+                    <button onclick="setupAttributes()">속성 설정</button>
+                </div>
+            </div>
+            
+            <div id="attributeSetup" class="hide"></div>
+            
+            <div id="productDetails" class="hide"></div>
+            
+            <div class="form-group hide" id="populationGroup">
+                <label for="population">도시 인구 (명):</label>
+                <input type="number" id="population" min="1" value="5000">
+                <button onclick="calculateUtilities()" id="calculateBtn">계산하기</button>
+            </div>
+        </div>
+        
+        <div class="results" id="resultsSection">
+            <h2>분석 결과</h2>
+            
+            <h3>🔸 유틸리티 추정</h3>
+            <div id="utilityResults"></div>
+            
+            <h3>🔸 선택 확률 및 시장 점유율</h3>
+            <div id="marketShareResults"></div>
+            
+            <h3>🔁 시뮬레이션 반복</h3>
+            <p>속성 또는 가격을 변경하여 시나리오를 비교하거나, 타깃 시장에 맞춰 유틸리티를 조정할 수 있습니다.</p>
+            <div>
+                <button onclick="resetSimulation()" class="btn-reset">새로운 시뮬레이션</button>
+                <button onclick="adjustProduct()" class="btn-secondary">제품 속성 조정</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let products = [];
+        let attributes = [];
+        let utilities = {};
+        
+        // 제품 설정
+        function setupProducts() {
+            const numProducts = parseInt(document.getElementById('numProducts').value);
+            if (numProducts < 2 || numProducts > 10) {
+                alert('제품 수는 2에서 10 사이여야 합니다.');
+                return;
+            }
+            
+            products = [];
+            for (let i = 0; i < numProducts; i++) {
+                products.push({
+                    id: i,
+                    name: i === 0 ? '신제품' : `기존 제품 ${String.fromCharCode(65 + i - 1)}`,
+                    attributes: {}
+                });
+            }
+            
+            document.getElementById('productSetup').classList.remove('hide');
+        }
+        
+        // 속성 설정
+        function setupAttributes() {
+            const numAttributes = parseInt(document.getElementById('numAttributes').value);
+            if (numAttributes < 1 || numAttributes > 4) {
+                alert('속성 수는 1에서 4 사이여야 합니다.');
+                return;
+            }
+            
+            attributes = [];
+            const attributeSetup = document.getElementById('attributeSetup');
+            attributeSetup.innerHTML = '';
+            attributeSetup.classList.remove('hide');
+            
+            const attributeNames = ['가격', '품질', '브랜드', '디자인'];
+            const scaleTypes = ['비율척도', '명목척도'];
+            
+            for (let i = 0; i < numAttributes; i++) {
+                const attributeContainer = document.createElement('div');
+                attributeContainer.className = 'attribute-container';
+                
+                const nameLabel = document.createElement('label');
+                nameLabel.textContent = `속성 ${i + 1} 이름:`;
+                
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.id = `attributeName${i}`;
+                nameInput.value = i < attributeNames.length ? attributeNames[i] : '';
+                
+                const scaleLabel = document.createElement('label');
+                scaleLabel.textContent = '척도 유형:';
+                
+                const scaleSelect = document.createElement('select');
+                scaleSelect.id = `attributeScale${i}`;
+                
+                scaleTypes.forEach(scale => {
+                    const option = document.createElement('option');
+                    option.value = scale;
+                    option.textContent = scale;
+                    scaleSelect.appendChild(option);
+                });
+                
+                const levelCountLabel = document.createElement('label');
+                levelCountLabel.textContent = '수준 개수:';
+                
+                const levelCountInput = document.createElement('input');
+                levelCountInput.type = 'number';
+                levelCountInput.id = `levelCount${i}`;
+                levelCountInput.min = '2';
+                levelCountInput.max = '5';
+                levelCountInput.value = '3';
+                
+                const levelContainer = document.createElement('div');
+                levelContainer.id = `levelContainer${i}`;
+                
+                const setupLevelsBtn = document.createElement('button');
+                setupLevelsBtn.textContent = '수준 설정';
+                setupLevelsBtn.onclick = function() {
+                    setupLevels(i);
+                };
+                
+                attributeContainer.appendChild(nameLabel);
+                attributeContainer.appendChild(nameInput);
+                attributeContainer.appendChild(document.createElement('br'));
+                attributeContainer.appendChild(scaleLabel);
+                attributeContainer.appendChild(scaleSelect);
+                attributeContainer.appendChild(document.createElement('br'));
+                attributeContainer.appendChild(levelCountLabel);
+                attributeContainer.appendChild(levelCountInput);
+                attributeContainer.appendChild(setupLevelsBtn);
+                attributeContainer.appendChild(levelContainer);
+                
+                attributeSetup.appendChild(attributeContainer);
+            }
+            
+            const setupProductsBtn = document.createElement('button');
+            setupProductsBtn.textContent = '속성 확정 후 제품 세부사항 입력';
+            setupProductsBtn.onclick = function() {
+                finalizeAttributes();
+            };
+            
+            attributeSetup.appendChild(setupProductsBtn);
+        }
+        
+        // 수준 설정
+        function setupLevels(attributeIndex) {
+            const levelCount = parseInt(document.getElementById(`levelCount${attributeIndex}`).value);
+            if (levelCount < 2 || levelCount > 5) {
+                alert('수준 개수는 2에서 5 사이여야 합니다.');
+                return;
+            }
+            
+            const levelContainer = document.getElementById(`levelContainer${attributeIndex}`);
+            levelContainer.innerHTML = '';
+            
+            const attributeName = document.getElementById(`attributeName${attributeIndex}`).value;
+            const scale = document.getElementById(`attributeScale${attributeIndex}`).value;
+            
+            // 예시 수준 데이터
+            const exampleLevels = {
+                '가격': ['3000원', '5000원', '7000원', '9000원', '12000원'],
+                '품질': ['하', '중', '상', '최상', '프리미엄'],
+                '브랜드': ['신제품', '인기브랜드', '글로벌브랜드', '프리미엄브랜드', '럭셔리브랜드'],
+                '디자인': ['심플', '모던', '클래식', '유니크', '혁신적']
+            };
+            
+            // 기본 예시 값
+            const defaultExamples = ['수준 1', '수준 2', '수준 3', '수준 4', '수준 5'];
+            
+            levelContainer.innerHTML = '<h4>수준 정의:</h4>';
+            
+            for (let i = 0; i < levelCount; i++) {
+                const levelDiv = document.createElement('div');
+                levelDiv.className = 'level-container';
+                
+                const levelLabel = document.createElement('label');
+                levelLabel.textContent = `수준 ${i + 1}:`;
+                
+                const levelInput = document.createElement('input');
+                levelInput.type = 'text';
+                levelInput.id = `level_${attributeIndex}_${i}`;
+                
+                // 예시 값 설정
+                if (exampleLevels[attributeName] && i < exampleLevels[attributeName].length) {
+                    levelInput.value = exampleLevels[attributeName][i];
+                } else {
+                    levelInput.value = defaultExamples[i];
+                }
+                
+                const utilityLabel = document.createElement('label');
+                utilityLabel.textContent = '유틸리티 추정값:';
+                
+                const utilityInput = document.createElement('input');
+                utilityInput.type = 'number';
+                utilityInput.id = `utility_${attributeIndex}_${i}`;
+                utilityInput.step = '0.1';
+                
+                // 기본 유틸리티 값
+                if (attributeName === '가격') {
+                    // 가격은 일반적으로 부(-)의 유틸리티를 가짐
+                    utilityInput.value = (-0.2 * (i + 1)).toFixed(1);
+                } else {
+                    // 다른 속성은 일반적으로 정(+)의 유틸리티를 가짐
+                    utilityInput.value = (0.3 * (i + 1)).toFixed(1);
+                }
+                
+                levelDiv.appendChild(levelLabel);
+                levelDiv.appendChild(levelInput);
+                levelDiv.appendChild(utilityLabel);
+                levelDiv.appendChild(utilityInput);
+                
+                levelContainer.appendChild(levelDiv);
+            }
+        }
+        
+        // 속성 확정
+        function finalizeAttributes() {
+            attributes = [];
+            
+            for (let i = 0; i < parseInt(document.getElementById('numAttributes').value); i++) {
+                const name = document.getElementById(`attributeName${i}`).value;
+                const scale = document.getElementById(`attributeScale${i}`).value;
+                const levelCount = parseInt(document.getElementById(`levelCount${i}`).value);
+                
+                const levels = [];
+                const levelUtilities = {};
+                
+                for (let j = 0; j < levelCount; j++) {
+                    const levelElement = document.getElementById(`level_${i}_${j}`);
+                    const utilityElement = document.getElementById(`utility_${i}_${j}`);
+                    
+                    if (!levelElement || !utilityElement) {
+                        alert(`${name} 속성의 수준을 먼저 설정해주세요.`);
+                        return;
+                    }
+                    
+                    const level = levelElement.value;
+                    const utility = parseFloat(utilityElement.value);
+                    
+                    levels.push(level);
+                    levelUtilities[level] = utility;
+                }
+                
+                attributes.push({
+                    id: i,
+                    name: name,
+                    scale: scale,
+                    levels: levels,
+                    utilities: levelUtilities
+                });
+            }
+            
+            setupProductDetails();
+        }
+        
+        // 제품 세부사항 설정
+        function setupProductDetails() {
+            const productDetails = document.getElementById('productDetails');
+            productDetails.innerHTML = '';
+            productDetails.classList.remove('hide');
+            
+            products.forEach(product => {
+                const productContainer = document.createElement('div');
+                productContainer.className = 'product-container';
+                
+                const productTitle = document.createElement('h3');
+                productTitle.textContent = product.name;
+                
+                productContainer.appendChild(productTitle);
+                
+                // 제품명 입력
+                const nameGroup = document.createElement('div');
+                nameGroup.className = 'form-group';
+                
+                const nameLabel = document.createElement('label');
+                nameLabel.textContent = '제품명:';
+                
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.id = `productName_${product.id}`;
+                nameInput.value = product.name;
+                
+                nameGroup.appendChild(nameLabel);
+                nameGroup.appendChild(nameInput);
+                productContainer.appendChild(nameGroup);
+                
+                // 각 속성별 레벨 선택
+                attributes.forEach(attribute => {
+                    const attrGroup = document.createElement('div');
+                    attrGroup.className = 'form-group';
+                    
+                    const attrLabel = document.createElement('label');
+                    attrLabel.textContent = `${attribute.name} (${attribute.scale}):`;
+                    
+                    const attrSelect = document.createElement('select');
+                    attrSelect.id = `product_${product.id}_attr_${attribute.id}`;
+                    
+                    attribute.levels.forEach(level => {
+                        const option = document.createElement('option');
+                        option.value = level;
+                        option.textContent = level;
+                        attrSelect.appendChild(option);
+                    });
+                    
+                    attrGroup.appendChild(attrLabel);
+                    attrGroup.appendChild(attrSelect);
+                    productContainer.appendChild(attrGroup);
+                });
+                
+                productDetails.appendChild(productContainer);
+            });
+            
+            document.getElementById('populationGroup').classList.remove('hide');
+        }
+        
+        // 유틸리티 계산
+        function calculateUtilities() {
+            // 제품 정보 수집
+            products.forEach(product => {
+                product.name = document.getElementById(`productName_${product.id}`).value;
+                product.attributes = {};
+                product.utility = 0;
+                
+                attributes.forEach(attribute => {
+                    const levelElement = document.getElementById(`product_${product.id}_attr_${attribute.id}`);
+                    const level = levelElement.value;
+                    
+                    product.attributes[attribute.name] = level;
+                    product.utility += attribute.utilities[level];
+                });
+            });
+            
+            // 결과 표시
+            displayResults();
+        }
+        
+        // 결과 표시
+        function displayResults() {
+            document.getElementById('resultsSection').style.display = 'block';
+            
+            // 유틸리티 테이블 생성
+            const utilityResults = document.getElementById('utilityResults');
+            utilityResults.innerHTML = '';
+            
+            // 각 제품별 유틸리티 테이블
+            products.forEach(product => {
+                const productTitle = document.createElement('h4');
+                productTitle.textContent = product.name;
+                utilityResults.appendChild(productTitle);
+                
+                const table = document.createElement('table');
+                
+                // 테이블 헤더
+                const headerRow = document.createElement('tr');
+                const headerCells = ['속성', '수준', '유틸리티'];
+                headerCells.forEach(cell => {
+                    const th = document.createElement('th');
+                    th.textContent = cell;
+                    headerRow.appendChild(th);
+                });
+                table.appendChild(headerRow);
+                
+                // 속성별 유틸리티
+                let totalUtility = 0;
+                
+                attributes.forEach(attribute => {
+                    const level = product.attributes[attribute.name];
+                    const utility = attribute.utilities[level];
+                    totalUtility += utility;
+                    
+                    const row = document.createElement('tr');
+                    
+                    const attrCell = document.createElement('td');
+                    attrCell.textContent = attribute.name;
+                    
+                    const levelCell = document.createElement('td');
+                    levelCell.textContent = level;
+                    
+                    const utilityCell = document.createElement('td');
+                    utilityCell.textContent = utility > 0 ? `+${utility.toFixed(1)}` : utility.toFixed(1);
+                    
+                    row.appendChild(attrCell);
+                    row.appendChild(levelCell);
+                    row.appendChild(utilityCell);
+                    
+                    table.appendChild(row);
+                });
+                
+                // 총 유틸리티
+                const totalRow = document.createElement('tr');
+                
+                const totalLabelCell = document.createElement('td');
+                totalLabelCell.textContent = '합계';
+                totalLabelCell.colSpan = 2;
+                totalLabelCell.style.fontWeight = 'bold';
+                
+                const totalValueCell = document.createElement('td');
+                totalValueCell.textContent = totalUtility > 0 ? `+${totalUtility.toFixed(1)}` : totalUtility.toFixed(1);
+                totalValueCell.style.fontWeight = 'bold';
+                
+                totalRow.appendChild(totalLabelCell);
+                totalRow.appendChild(totalValueCell);
+                
+                table.appendChild(totalRow);
+                
+                utilityResults.appendChild(table);
+            });
+            
+            // 선택 확률 및 시장 점유율
+            const marketShareResults = document.getElementById('marketShareResults');
+            marketShareResults.innerHTML = '';
+            
+            const table = document.createElement('table');
+            
+            // 테이블 헤더
+            const headerRow = document.createElement('tr');
+            const population = parseInt(document.getElementById('population').value);
+            const headerCells = ['제품명', '유틸리티 합', '선택 확률', `예상 인원 (도시 인구 ${population.toLocaleString()}명 기준)`];
+            
+            headerCells.forEach(cell => {
+                const th = document.createElement('th');
+                th.textContent = cell;
+                headerRow.appendChild(th);
+            });
+            
+            table.appendChild(headerRow);
+            
+            // 다항 로지트 모델 계산
+            const expUtilities = products.map(product => Math.exp(product.utility));
+            const sumExpUtilities = expUtilities.reduce((a, b) => a + b, 0);
+            
+            products.forEach((product, index) => {
+                const probability = expUtilities[index] / sumExpUtilities;
+                const expectedPopulation = Math.round(probability * population);
+                
+                product.probability = probability;
+                product.expectedPopulation = expectedPopulation;
+                
+                const row = document.createElement('tr');
+                
+                const nameCell = document.createElement('td');
+                nameCell.textContent = product.name;
+                
+                const utilityCell = document.createElement('td');
+                utilityCell.textContent = product.utility.toFixed(1);
+                
+                const probCell = document.createElement('td');
+                probCell.textContent = `${(probability * 100).toFixed(1)}%`;
+                
+                const popCell = document.createElement('td');
+                popCell.textContent = `${expectedPopulation.toLocaleString()}명`;
+                
+                row.appendChild(nameCell);
+                row.appendChild(utilityCell);
+                row.appendChild(probCell);
+                row.appendChild(popCell);
+                
+                table.appendChild(row);
+            });
+            
+            marketShareResults.appendChild(table);
+            
+            // 위쪽으로 스크롤
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // 시뮬레이션 리셋
+        function resetSimulation() {
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('productDetails').classList.add('hide');
+            document.getElementById('attributeSetup').classList.add('hide');
+            document.getElementById('productSetup').classList.add('hide');
+            document.getElementById('populationGroup').classList.add('hide');
+            
+            document.getElementById('numProducts').value = 3;
+            document.getElementById('numAttributes').value = 3;
+            
+            products = [];
+            attributes = [];
+            utilities = {};
+        }
+        
+        // 제품 속성 조정
+        function adjustProduct() {
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('productDetails').classList.remove('hide');
+            document.getElementById('populationGroup').classList.remove('hide');
+            document.getElementById('productDetails').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // 초기화
+        function init() {
+            // 한국어 폰트 추가
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
+            document.head.appendChild(link);
+            
+            const fontLink = document.createElement('link');
+            fontLink.rel = 'stylesheet';
+            fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap';
+            document.head.appendChild(fontLink);
+        }
+        
+        // 페이지 로드 시 초기화
+        window.onload = init;
+    </script>
+</body>
+</html>
