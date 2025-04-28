@@ -57,8 +57,8 @@ function setupProducts() {
 // 속성 설정
 function setupAttributes() {
     const numAttributes = parseInt(document.getElementById('numAttributes').value);
-    if (numAttributes < 2 || numAttributes > 5) {
-        alert('속성 수는 2에서 5 사이여야 합니다.');
+    if (numAttributes < 4 || numAttributes > 8) {
+        alert('속성 수는 4에서 8 사이여야 합니다.');
         return;
     }
     
@@ -89,7 +89,7 @@ function setupAttributes() {
     attributeTitle.textContent = '2단계: 경쟁시장에서 중요한 속성 정의';
     attributeSetup.appendChild(attributeTitle);
     
-    const attributeNames = ['품질', '디자인', '가격', '기능', '브랜드'];
+    const attributeNames = ['품질', '디자인', '가격', '기능', '인지도', '내구성', 'A/S', '편의성'];
     const scaleTypes = ['비율척도', '명목척도'];
     
     for (let i = 0; i < numAttributes; i++) {
@@ -222,9 +222,13 @@ function setupLevels(attributeIndex) {
             levels: ['심플', '모던', '클래식', '유니크', '혁신적'],
             description: '제품의 디자인 스타일을 의미합니다. 목표 시장에 따라 선호되는 디자인이 다를 수 있습니다.'
         },
+        '인지도': {
+            levels: ['낮음', '중간', '높음', '매우 높음', '최상'],
+            description: '제품이나 브랜드의 시장 인지도 수준을 의미합니다. 높은 인지도는 소비자들이 제품을 더 잘 알고 있음을 의미합니다.'
+        },
         '브랜드': {
             levels: ['신제품', '인기브랜드', '글로벌브랜드', '프리미엄브랜드', '럭셔리브랜드'],
-            description: '제품의, 브랜드 인지도 또는 브랜드 가치를 의미합니다.'
+            description: '제품의 브랜드 가치를 의미합니다.'
         },
         '기능': {
             levels: ['기본형', '중급형', '고급형', '프리미엄형', '최고급형'],
@@ -404,7 +408,45 @@ function setupProductDetails() {
 }
 
 // AI를 사용하여 유틸리티 추정
-function estimateUtilities() {
+async function estimateUtilities() {
+    // 먼저 Gemini API를 사용한 추정 시도
+    const useGeminiApi = localStorage.getItem('useGeminiApi') !== 'false';
+    const productCategory = document.getElementById('productCategory').value;
+    
+    if (useGeminiApi && window.GeminiAPI) {
+        // 로딩 상태 표시
+        const calculateBtn = document.getElementById('calculateBtn');
+        const originalBtnText = calculateBtn.textContent;
+        calculateBtn.textContent = '🔄 Gemini API로 계산 중...';
+        calculateBtn.disabled = true;
+        
+        try {
+            // Gemini API를 사용하여 유틸리티 추정
+            const geminiSuccess = await window.GeminiAPI.estimateUtilitiesWithGemini(attributes, productCategory);
+            
+            if (geminiSuccess) {
+                // Gemini API로 추정에 성공한 경우, 제품 유틸리티 계산
+                applyUtilitiesToProducts();
+                console.log("Gemini API가 제공한 효용값이 적용되었습니다.");
+                
+                // 버튼 상태 복원
+                calculateBtn.textContent = originalBtnText;
+                calculateBtn.disabled = false;
+                
+                return true;
+            } else {
+                console.log("Gemini API 추정 실패, 대체 방식으로 전환합니다.");
+                calculateBtn.textContent = originalBtnText;
+                calculateBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error("Gemini API 호출 중 오류:", error);
+            calculateBtn.textContent = originalBtnText;
+            calculateBtn.disabled = false;
+        }
+    }
+    
+    // Gemini API 사용에 실패하거나 사용하지 않는 경우 기존 방식으로 진행
     // 파일에서 제공된 유틸리티 값 정의 - '속성별 척도구분, 효용값 게산.txt' 파일 내용 반영
     const predefinedUtilities = {
         "디자인": {
@@ -426,6 +468,11 @@ function estimateUtilities() {
             "비쌈": -0.85,
             "보통": 0,
             "저렴": 0.85
+        },
+        "인지도": {
+            "낮음": -0.75,
+            "중간": 0,
+            "높음": 0.75
         },
         "배송": {
             "배송이 느림": -0.7,
@@ -533,6 +580,14 @@ function estimateUtilities() {
         attribute.utilities = levelUtilities;
     });
     
+    // 유틸리티 계산 적용
+    applyUtilitiesToProducts();
+    console.log("참조 효용값이 적용되었습니다.");
+    return true;
+}
+
+// 제품에 유틸리티 값 적용하는 함수를 분리 (재사용 가능하도록)
+function applyUtilitiesToProducts() {
     // 각 속성 별로 유틸리티 계산하여 제품에 적용
     products.forEach(product => {
         product.name = document.getElementById(`productName_${product.id}`).value;
@@ -547,19 +602,23 @@ function estimateUtilities() {
             product.utility += attribute.utilities[level];
         });
     });
-    
-    console.log("참조 효용값이 적용되었습니다.");
-    return true;
 }
 
 // 유틸리티 계산
-function calculateUtilities() {
-    // AI로 유틸리티 추정
-    if (estimateUtilities()) {
-        // 결과 표시
-        displayResults();
-    } else {
-        alert('유틸리티 추정 중 오류가 발생했습니다.');
+async function calculateUtilities() {
+    try {
+        // AI로 유틸리티 추정 (비동기 함수로 변경)
+        const success = await estimateUtilities();
+        
+        if (success) {
+            // 결과 표시
+            displayResults();
+        } else {
+            alert('유틸리티 추정 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('유틸리티 계산 중 오류:', error);
+        alert('유틸리티 계산 중 오류가 발생했습니다: ' + error.message);
     }
 }
 

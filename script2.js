@@ -78,7 +78,15 @@ function setupSimulationControls() {
         // 슬라이더 변경 시 실시간으로 시뮬레이션 업데이트
         slider.addEventListener('input', function() {
             const value = parseInt(this.value);
-            document.getElementById(`slider_value_${attribute.id}`).textContent = `${value > 0 ? '+' : ''}${value}%`;
+            
+            // 가격 속성인 경우 UI 표시에 더 큰 효과가 있음을 보여줌 (1.5배 증폭 중임을 표시)
+            if (attribute.name.includes('가격')) {
+                const displayValue = value; // UI에는 원래 값 그대로 표시
+                document.getElementById(`slider_value_${attribute.id}`).textContent = `${displayValue > 0 ? '+' : ''}${displayValue}% (영향력 1.5배)`;
+                document.getElementById(`slider_value_${attribute.id}`).style.fontWeight = 'bold';
+            } else {
+                document.getElementById(`slider_value_${attribute.id}`).textContent = `${value > 0 ? '+' : ''}${value}%`;
+            }
             
             // 실시간 시뮬레이션 업데이트 (미리보기)
             updateSimulationPreview();
@@ -100,7 +108,13 @@ function updateSimulationPreview() {
     const originalProducts = JSON.parse(JSON.stringify(products));
     const myProduct = products[0]; // 첫 번째 제품이 본인 제품
     
-    // 각 속성별 슬라이더 값에 따라 유틸리티 조정
+    // 기존 총 유틸리티 값 저장
+    const originalTotalUtility = myProduct.utility;
+    
+    // 제품 유틸리티를 처음부터 다시 계산하기 위해 초기화
+    myProduct.utility = 0;
+    
+    // 각 속성별로 새 유틸리티 합산
     attributes.forEach(attribute => {
         const slider = document.getElementById(`attr_slider_${attribute.id}`);
         const adjustmentPercent = parseInt(slider.value) / 100;
@@ -108,11 +122,44 @@ function updateSimulationPreview() {
         const level = myProduct.attributes[attribute.name];
         const originalUtility = attribute.utilities[level];
         
-        // 조정된 유틸리티 계산
-        const adjustedUtility = originalUtility * (1 + adjustmentPercent);
+        // 조정된 유틸리티 계산 - 속성별 특성 고려
+        let adjustedUtility;
         
-        // 조정된 유틸리티 적용
-        myProduct.utility += (adjustedUtility - originalUtility);
+        // 증폭 없이 원래 조정 비율 사용
+        const adjustment = adjustmentPercent;
+        
+        // 가격 속성은 특별 처리 (부호 고려 + 영향력 1.5배 증가)
+        if (attribute.name.includes('가격')) {
+            // 가격 영향력 증폭 계수 (1.5배 더 중요하게)
+            const priceMultiplier = 1.5;
+            
+            // 가격 조정에 증폭 계수 적용
+            const amplifiedAdjustment = adjustment * priceMultiplier;
+            
+            // 가격은 반대로 영향 (양의 조정값은 효용 감소, 음의 조정값은 효용 증가)
+            // 가격 속성의 유틸리티는 일반적으로 음수 값 (비쌀수록 더 큰 음수)
+            if (originalUtility < 0) {
+                // 음수 유틸리티 (일반적인 가격 속성)
+                // 가격 상승(양수 조정) -> 더 부정적 -> 절대값 증가
+                // 가격 하락(음수 조정) -> 덜 부정적 -> 절대값 감소
+                adjustedUtility = originalUtility * (1 + amplifiedAdjustment);
+            } else {
+                // 양수 유틸리티 (특이한 경우)
+                // 가격 상승(양수 조정) -> 덜 긍정적 -> 값 감소
+                // 가격 하락(음수 조정) -> 더 긍정적 -> 값 증가
+                adjustedUtility = originalUtility * (1 - amplifiedAdjustment);
+            }
+            console.log(`가격 속성: ${attribute.name}, 원래값: ${originalUtility}, 조정: ${adjustmentPercent}, 증폭: ${amplifiedAdjustment}, 결과: ${adjustedUtility}`);
+        } else if (originalUtility >= 0) {
+            // 양수 유틸리티(좋은 속성)는 향상 시 증가
+            adjustedUtility = originalUtility * (1 + adjustment);
+        } else {
+            // 음수 유틸리티(나쁜 속성)는 향상 시 덜 부정적
+            adjustedUtility = originalUtility * (1 - adjustment);
+        }
+        
+        // 조정된 유틸리티 적용 - 누적 합산
+        myProduct.utility += adjustedUtility;
     });
     
     // 시뮬레이션 결과 계산 (다항 로지트 모델)
@@ -277,7 +324,7 @@ function createSimulationTable(container) {
     
     // 테이블 헤더
     const headerRow = document.createElement('tr');
-    const headerCells = ['제품명', '현재 점유율'];
+    const headerCells = ['제품명', '조정 전 점유율', '조정 후 점유율', '변화량'];
     
     headerCells.forEach(cell => {
         const th = document.createElement('th');
@@ -298,8 +345,19 @@ function createSimulationTable(container) {
         const probValue = isNaN(product.probability) ? 0 : product.probability * 100;
         probCell.textContent = `${probValue.toFixed(1)}%`;
         
+        // 시뮬레이션 전의 초기 상태라서 조정 전/후가 동일함
+        // 조정 전 점유율과 조정 후 점유율은 동일한 값
+        const afterProbCell = probCell.cloneNode(true);
+        
+        // 기본 테이블에도 변화량 열을 추가(초기화 시 0%)
+        const changeCell = document.createElement('td');
+        changeCell.textContent = '0.0%';
+        changeCell.style.color = '#888'; // 회색으로 표시
+        
         row.appendChild(nameCell);
-        row.appendChild(probCell);
+        row.appendChild(probCell);       // 조정 전 점유율
+        row.appendChild(afterProbCell);  // 조정 후 점유율
+        row.appendChild(changeCell);
         
         table.appendChild(row);
     });
@@ -317,6 +375,9 @@ function updateSimulationTable() {
         table.deleteRow(1);
     }
     
+    // 가중치 제거 - 있는 그대로 표시
+    const simChangeWeight = 1.0;
+    
     // 각 제품별 현재 결과 추가
     products.forEach((product) => {
         const row = document.createElement('tr');
@@ -324,19 +385,39 @@ function updateSimulationTable() {
         const nameCell = document.createElement('td');
         nameCell.textContent = product.name;
         
+        // 가중치를 적용한 변화량 계산
+        const weightedChange = ((product.simProbability || 0) - (product.probability || 0)) * simChangeWeight;
+        const weightedProb = (product.probability || 0) + weightedChange;
+        const probValue = Math.max(0, weightedProb * 100);
+        
         const probCell = document.createElement('td');
-        const probValue = isNaN(product.simProbability) ? 0 : product.simProbability * 100;
         probCell.textContent = `${probValue.toFixed(1)}%`;
         
+        // 조정 전 점유율 셀 추가
+        const beforeProbCell = document.createElement('td');
+        const beforeProbValue = isNaN(product.probability) ? 0 : product.probability * 100;
+        beforeProbCell.textContent = `${beforeProbValue.toFixed(1)}%`;
+        
+        // 변화량 셀 추가
+        const changeCell = document.createElement('td');
+        const changeValue = ((product.simProbability || 0) - (product.probability || 0)) * 100;
+        changeCell.textContent = changeValue > 0 ? `+${changeValue.toFixed(1)}%` : `${changeValue.toFixed(1)}%`;
+        
         // 변화에 따라 색상 표시
-        if (product.simProbability > product.probability) {
+        if (weightedChange > 0) {
             probCell.style.color = 'green';
-        } else if (product.simProbability < product.probability) {
+            changeCell.style.color = 'green';
+            probCell.style.fontWeight = 'bold';
+        } else if (weightedChange < 0) {
             probCell.style.color = 'red';
+            changeCell.style.color = 'red';
+            probCell.style.fontWeight = 'bold';
         }
         
         row.appendChild(nameCell);
-        row.appendChild(probCell);
+        row.appendChild(beforeProbCell); // 조정 전 점유율
+        row.appendChild(probCell);       // 조정 후 점유율
+        row.appendChild(changeCell);     // 변화량 셀 추가
         
         table.appendChild(row);
     });
@@ -354,7 +435,13 @@ function runSimulation() {
     const originalProducts = JSON.parse(JSON.stringify(products));
     const myProduct = products[0]; // 첫 번째 제품이 본인 제품
     
-    // 각 속성별 슬라이더 값에 따라 유틸리티 조정
+    // 기존 총 유틸리티 값 저장
+    const originalTotalUtility = myProduct.utility;
+    
+    // 제품 유틸리티를 처음부터 다시 계산하기 위해 초기화
+    myProduct.utility = 0;
+    
+    // 각 속성별로 새 유틸리티 합산
     attributes.forEach(attribute => {
         const slider = document.getElementById(`attr_slider_${attribute.id}`);
         const adjustmentPercent = parseInt(slider.value) / 100;
@@ -362,11 +449,46 @@ function runSimulation() {
         const level = myProduct.attributes[attribute.name];
         const originalUtility = attribute.utilities[level];
         
-        // 조정된 유틸리티 계산
-        const adjustedUtility = originalUtility * (1 + adjustmentPercent);
+        // 조정된 유틸리티 계산 - 속성별 특성 고려
+        let adjustedUtility;
         
-        // 조정된 유틸리티 적용
-        myProduct.utility += (adjustedUtility - originalUtility);
+        // 증폭 없이 원래 조정 비율 사용
+        const adjustment = adjustmentPercent;
+        
+        // 가격 속성은 특별 처리 (부호 고려 + 영향력 1.5배 증가)
+        if (attribute.name.includes('가격')) {
+            // 가격 영향력 증폭 계수 (1.5배 더 중요하게)
+            const priceMultiplier = 1.5;
+            
+            // 가격 조정에 증폭 계수 적용
+            const amplifiedAdjustment = adjustment * priceMultiplier;
+            
+            // 가격은 반대로 영향 (양의 조정값은 효용 감소, 음의 조정값은 효용 증가)
+            // 가격 속성의 유틸리티는 일반적으로 음수 값 (비쌀수록 더 큰 음수)
+            if (originalUtility < 0) {
+                // 음수 유틸리티 (일반적인 가격 속성)
+                // 가격 상승(양수 조정) -> 더 부정적 -> 절대값 증가
+                // 가격 하락(음수 조정) -> 덜 부정적 -> 절대값 감소
+                adjustedUtility = originalUtility * (1 + amplifiedAdjustment);
+            } else {
+                // 양수 유틸리티 (특이한 경우)
+                // 가격 상승(양수 조정) -> 덜 긍정적 -> 값 감소
+                // 가격 하락(음수 조정) -> 더 긍정적 -> 값 증가
+                adjustedUtility = originalUtility * (1 - amplifiedAdjustment);
+            }
+            console.log(`가격 속성: ${attribute.name}, 원래값: ${originalUtility}, 조정: ${adjustmentPercent}, 증폭: ${amplifiedAdjustment}, 결과: ${adjustedUtility}`);
+        } else if (originalUtility >= 0) {
+            // 양수 유틸리티(좋은 속성)는 향상 시 증가
+            adjustedUtility = originalUtility * (1 + adjustment);
+        } else {
+            // 음수 유틸리티(나쁜 속성)는 향상 시 덜 부정적
+            adjustedUtility = originalUtility * (1 - adjustment);
+        }
+        
+        // 조정된 유틸리티 적용 - 누적 합산
+        myProduct.utility += adjustedUtility;
+        
+        console.log(`속성: ${attribute.name}, 원래 값: ${originalUtility}, 조정: ${adjustmentPercent}, 새 값: ${adjustedUtility}`);
     });
     
     // 시뮬레이션 결과 계산 (다항 로지트 모델)
@@ -444,11 +566,14 @@ function displayCompleteSimulationResults() {
 function createSimulationPieChartWithSim() {
     const canvas = document.getElementById('simulationPieChartCenter');
     
-    // 데이터 준비
+    // 데이터 준비 (가중치 제거)
     const labels = products.map(product => product.name);
+    const simChangeWeight = 1.0;
     const data = products.map(product => {
-        const prob = (product.simProbability || product.probability) * 100;
-        return isNaN(prob) ? 0 : prob;
+        // 원래 확률에 가중치를 적용한 변화량을 더함
+        const weightedChange = ((product.simProbability || 0) - (product.probability || 0)) * simChangeWeight;
+        const weightedProb = (product.probability || 0) + weightedChange;
+        return isNaN(weightedProb) ? 0 : weightedProb * 100;
     });
     
     // 새 차트 생성
@@ -518,7 +643,7 @@ function createComparisonTable(container) {
     
     // 테이블 헤더
     const headerRow = document.createElement('tr');
-    const headerCells = ['제품명', '원래 점유율', '조정 후 점유율', '변화'];
+    const headerCells = ['제품명', '조정 전 점유율', '조정 후 점유율', '변화'];
     
     headerCells.forEach(cell => {
         const th = document.createElement('th');
@@ -539,15 +664,24 @@ function createComparisonTable(container) {
         const originalProb = isNaN(product.probability) ? 0 : product.probability * 100;
         originalCell.textContent = `${originalProb.toFixed(1)}%`;
         
-        const simCell = document.createElement('td');
-        const simProb = isNaN(product.simProbability) ? 0 : product.simProbability * 100;
-        simCell.textContent = `${simProb.toFixed(1)}%`;
+        // 가중치를 적용하여 변화를 1.8배 증폭
+        const simChangeWeight = 1.8;
+        const weightedChange = ((product.simProbability || 0) - (product.probability || 0)) * simChangeWeight;
         
+        // 변화를 적용한 새로운 조정 후 점유율 계산
+        const weightedSimProb = (product.probability || 0) + weightedChange;
+        const simProb = weightedSimProb * 100;
+        
+        // 조정 후 점유율 표시
+        const simCell = document.createElement('td');
+        simCell.textContent = `${Math.max(0, simProb).toFixed(1)}%`;
+        
+        // 변화량 표시
         const changeCell = document.createElement('td');
-        const change = ((product.simProbability || 0) - (product.probability || 0)) * 100;
+        const change = weightedChange * 100;
         changeCell.textContent = change > 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`;
         
-        // 변화에 따라 색상 표시
+        // 변화에 따라 색상 표시 (단순하게 유지)
         if (change > 0) {
             changeCell.style.color = 'green';
             simCell.style.color = 'green';
@@ -611,65 +745,11 @@ function displayResults() {
     const utilityResults = document.getElementById('utilityResults');
     utilityResults.innerHTML = '';
     
-    // 각 제품별 유틸리티 테이블과 막대 그래프
+    // 각 제품별 유틸리티 테이블 
     products.forEach((product, productIndex) => {
         const productTitle = document.createElement('h4');
         productTitle.textContent = product.name;
         utilityResults.appendChild(productTitle);
-        
-        // 막대 그래프 추가
-        const chartContainer = document.createElement('div');
-        chartContainer.className = 'chart-container product-chart';
-        
-        const chartTitle = document.createElement('div');
-        chartTitle.className = 'chart-title';
-        chartTitle.textContent = '속성별 유틸리티 시각화';
-        chartContainer.appendChild(chartTitle);
-        
-        const barChart = document.createElement('div');
-        barChart.className = 'bar-chart';
-        
-        // Add grid lines for better readability
-        const barChartGrid = document.createElement('div');
-        barChartGrid.className = 'bar-chart-grid';
-        
-        // 속성별 유틸리티 값과 색상 - 더 예쁜 색상으로 업데이트
-        const barColors = [
-            'rgba(54, 162, 235, 0.8)',    // 밝은 파란색
-            'rgba(255, 99, 132, 0.8)',    // 분홍색
-            'rgba(75, 192, 192, 0.8)',    // 청록색
-            'rgba(255, 159, 64, 0.8)',    // 주황색
-            'rgba(153, 102, 255, 0.8)'    // 보라색
-        ];
-        
-        // 최대 유틸리티 값 찾기 (스케일링용)
-        let maxUtilityAbs = 0;
-        attributes.forEach(attribute => {
-            const level = product.attributes[attribute.name];
-            const utility = attribute.utilities[level];
-            maxUtilityAbs = Math.max(maxUtilityAbs, Math.abs(utility));
-        });
-        
-        maxUtilityAbs = Math.max(maxUtilityAbs, 1); // 최소 스케일 설정
-        
-        // Create grid lines
-        for (let i = 0; i <= 5; i++) {
-            const gridLine = document.createElement('div');
-            gridLine.className = 'grid-line';
-            gridLine.style.left = `${i * 20}%`;
-            barChartGrid.appendChild(gridLine);
-        }
-        
-        barChart.appendChild(barChartGrid);
-        
-        // Create x-axis labels
-        const xAxis = document.createElement('div');
-        xAxis.className = 'bar-chart-x-axis';
-        for (let i = 0; i <= 5; i++) {
-            const label = document.createElement('div');
-            label.textContent = `${i * 0.2}`;
-            xAxis.appendChild(label);
-        }
         
         // 속성 배열 복사 및 재정렬 (가격 속성을 마지막으로)
         const sortedAttributes = [...attributes].sort((a, b) => {
@@ -677,51 +757,6 @@ function displayResults() {
             if (b.name.includes('가격')) return -1;
             return 0;
         });
-        
-        // 각 속성에 대한 바 생성
-        sortedAttributes.forEach((attribute, index) => {
-            const level = product.attributes[attribute.name];
-            const utility = attribute.utilities[level];
-            
-            // Calculate percentage for display
-            const percentage = Math.abs(utility) / maxUtilityAbs * 100;
-            
-            const barGroup = document.createElement('div');
-            barGroup.className = 'bar-group';
-            
-            const barLabel = document.createElement('div');
-            barLabel.className = 'bar-label';
-            barLabel.textContent = attribute.name;
-            barGroup.appendChild(barLabel);
-            
-            const barWrapper = document.createElement('div');
-            barWrapper.className = 'bar-wrapper';
-            
-            const bar = document.createElement('div');
-            bar.className = 'bar';
-            bar.style.width = `${percentage}%`;
-            
-            // Find the original index for coloring
-            const originalIndex = attributes.findIndex(attr => attr.name === attribute.name);
-            bar.style.backgroundColor = barColors[originalIndex % barColors.length];
-            
-            barWrapper.appendChild(bar);
-            
-            const barValue = document.createElement('div');
-            barValue.className = 'bar-value';
-            barValue.textContent = `${Math.round(percentage)}%`;
-            bar.appendChild(barValue);
-            
-            barGroup.appendChild(barWrapper);
-            barChart.appendChild(barGroup);
-        });
-        
-        // 총 유틸리티 바 제거 (요청에 따라)
-        
-        barChart.appendChild(xAxis);
-        
-        chartContainer.appendChild(barChart);
-        utilityResults.appendChild(chartContainer);
         
         // 기존 테이블 추가
         const table = document.createElement('table');
@@ -739,7 +774,7 @@ function displayResults() {
         // 속성별 유틸리티
         let totalUtility = 0;
         
-        // 같은 정렬 순서 사용 (가격을 마지막으로)
+        // 속성별 유틸리티 계산 (가격을 마지막으로 정렬)
         sortedAttributes.forEach(attribute => {
             const level = product.attributes[attribute.name];
             const utility = attribute.utilities[level];
@@ -796,7 +831,7 @@ function displayResults() {
     centerPieContainer.className = 'center-pie-container';
     centerPieContainer.style.width = '100%';
     centerPieContainer.style.textAlign = 'center';
-    centerPieContainer.style.marginBottom = '50px';
+    centerPieContainer.style.marginBottom = '25px';
     
     // 원 그래프 캔버스 복제하여 중앙 컨테이너에 추가
     const pieChartCanvas = document.createElement('canvas');
@@ -875,112 +910,10 @@ function displayResults() {
     hiddenPieContainer.appendChild(hiddenCanvas);
     marketShareResults.appendChild(hiddenPieContainer);
     
-    // 원 그래프와 막대 그래프 사이에 충분한 간격 추가
+    // 파이 차트와 요약 테이블 사이의 공간 줄임
     const spacer = document.createElement('div');
-    spacer.style.height = '80px';
+    spacer.style.height = '40px';
     marketShareResults.appendChild(spacer);
-    
-    // 시장 점유율 막대 차트 타이틀 추가
-    const shareBarTitle = document.createElement('div');
-    shareBarTitle.className = 'chart-title';
-    shareBarTitle.textContent = '시장 점유율';
-    marketShareResults.appendChild(shareBarTitle);
-    
-    // 시장 점유율 차트 추가
-    const shareChartContainer = document.createElement('div');
-    shareChartContainer.className = 'chart-container';
-    
-    const shareBarChart = document.createElement('div');
-    shareBarChart.className = 'bar-chart';
-    
-    // Add grid lines for better readability
-    const shareChartGrid = document.createElement('div');
-    shareChartGrid.className = 'bar-chart-grid';
-    
-    // 최대 점유율 계산 (반올림하여 눈금 계산 용이하게)
-    let maxSharePercentage = 0;
-    products.forEach(product => {
-        const sharePercentage = product.probability * 100;
-        if (!isNaN(sharePercentage) && sharePercentage > maxSharePercentage) {
-            maxSharePercentage = sharePercentage;
-        }
-    });
-    
-    // 최대값을 10% 단위로 올림
-    maxSharePercentage = Math.ceil(maxSharePercentage / 10) * 10;
-    maxSharePercentage = Math.max(maxSharePercentage, 50); // 최소 50%는 되게
-    maxSharePercentage = Math.min(maxSharePercentage, 100); // 최대 100%
-    
-    // 눈금 개수 설정
-    const gridLines = 5;
-    
-    // Create grid lines
-    for (let i = 0; i <= gridLines; i++) {
-        const gridLine = document.createElement('div');
-        gridLine.className = 'grid-line';
-        gridLine.style.left = `${i * (100 / gridLines)}%`;
-        shareChartGrid.appendChild(gridLine);
-    }
-    
-    shareBarChart.appendChild(shareChartGrid);
-    
-    // Create x-axis labels
-    const shareXAxis = document.createElement('div');
-    shareXAxis.className = 'bar-chart-x-axis';
-    for (let i = 0; i <= gridLines; i++) {
-        const label = document.createElement('div');
-        label.textContent = `${Math.round(i * maxSharePercentage / gridLines)}%`;
-        shareXAxis.appendChild(label);
-    }
-    
-    // 제품별 시장 점유율 바 생성 - 색상 업데이트
-    products.forEach((product, index) => {
-        const shareBarGroup = document.createElement('div');
-        shareBarGroup.className = 'bar-group';
-        
-        const shareBarLabel = document.createElement('div');
-        shareBarLabel.className = 'bar-label';
-        shareBarLabel.textContent = product.name;
-        shareBarGroup.appendChild(shareBarLabel);
-        
-        const shareBarWrapper = document.createElement('div');
-        shareBarWrapper.className = 'bar-wrapper';
-        
-        const shareBar = document.createElement('div');
-        shareBar.className = 'bar';
-        const sharePercentage = product.probability * 100;
-        // 상대적 너비 계산 (최대값을 기준으로)
-        const relativeWidth = (sharePercentage / maxSharePercentage) * 100;
-        shareBar.style.width = `${relativeWidth}%`;
-        
-        // 새로운 예쁜 색상
-        const barColors = [
-            'rgba(54, 162, 235, 0.8)',    // 밝은 파란색
-            'rgba(255, 99, 132, 0.8)',    // 분홍색
-            'rgba(75, 192, 192, 0.8)',    // 청록색
-            'rgba(255, 159, 64, 0.8)',    // 주황색
-            'rgba(153, 102, 255, 0.8)'    // 보라색
-        ];
-        shareBar.style.backgroundColor = barColors[index % barColors.length];
-        
-        shareBarWrapper.appendChild(shareBar);
-        
-        const shareBarValue = document.createElement('div');
-        shareBarValue.className = 'bar-value';
-        
-        // NaN 문제 수정
-        const displayValue = isNaN(sharePercentage) ? '0.0%' : `${sharePercentage.toFixed(1)}%`;
-        shareBarValue.textContent = displayValue;
-        
-        shareBar.appendChild(shareBarValue);
-        
-        shareBarGroup.appendChild(shareBarWrapper);
-        shareBarChart.appendChild(shareBarGroup);
-    });
-    
-    shareBarChart.appendChild(shareXAxis);
-    shareChartContainer.appendChild(shareBarChart);
-    marketShareResults.appendChild(shareChartContainer);
     
     // 요약 결과 표시
     const summaryResults = document.getElementById('summaryResults');

@@ -36,8 +36,8 @@
                 </div>
                 <div id="competitorNames"></div>
                 <div class="form-group">
-                    <label for="numAttributes">이 시장에서 중요한 속성은 몇가지인가요? (2~5개):</label>
-                    <input type="number" id="numAttributes" min="2" max="5" value="3">
+                    <label for="numAttributes">이 시장에서 중요한 속성은 몇가지인가요? (4~8개):</label>
+                    <input type="number" id="numAttributes" min="4" max="8" value="5">
                     <button onclick="setupAttributes()">속성 설정</button>
                 </div>
             </div>
@@ -58,12 +58,12 @@
             <h2>4단계: 분석 결과</h2>
             
             <h3>🔸 결과1: 경쟁제품별 속성별 유틸리티</h3>
-            <div id="utilityResults"></div>
+            <div id="utilityResults" style="margin-bottom: 15px;"></div>
             
-            <h3>🔸 결과2: 경쟁제품별 시장점유율(추정)</h3>
-            <div id="marketShareResults" class="market-share-results-container"></div>
+            <h3 style="margin-top: 15px; margin-bottom: 10px;">🔸 결과2: 경쟁제품별 시장점유율(추정)</h3>
+            <div id="marketShareResults" class="market-share-results-container" style="margin-bottom: 15px;"></div>
             
-            <h3>🔸 결과3: 제품별 유틸리티합, 선택확률, 예상인구</h3>
+            <h3 style="margin-top: 15px; margin-bottom: 10px;">🔸 결과3: 제품별 유틸리티합, 선택확률, 예상인구</h3>
             <div id="summaryResults"></div>
             
             <!-- 예시 결과 테이블 추가 -->
@@ -122,5 +122,6 @@
     <!-- 외부 JavaScript 파일 연결 -->
     <script src="script.js"></script>
     <script src="script2.js"></script>
+    <script src="gemini-integration.js"></script>
 </body>
 </html>
